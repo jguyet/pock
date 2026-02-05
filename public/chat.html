@@ -1,0 +1,47 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Pock - Multi-Agent Chat</title>
+  <link rel="stylesheet" href="/styles.css">
+</head>
+<body>
+  <div class="container">
+    <!-- Header with project info -->
+    <header class="header">
+      <div class="header-content">
+        <a href="/" class="btn-home" title="Retour à l'accueil">🏠</a>
+        <h1 class="logo">🎯 <span id="project-title">Pock</span></h1>
+        <button id="clear-btn" class="btn-clear" title="Clear chat">🗑️</button>
+      </div>
+    </header>
+
+    <!-- Chat messages area -->
+    <div class="chat-container">
+      <div id="messages" class="messages">
+        <!-- Messages will be inserted here -->
+      </div>
+    </div>
+
+    <!-- Input area -->
+    <div class="input-container">
+      <div class="input-wrapper">
+        <textarea 
+          id="message-input" 
+          placeholder="Type your message... Use @ to mention agents (@project-manager, @developer, etc.)"
+          rows="3"
+        ></textarea>
+        <button id="send-btn" class="btn-send">
+          <span>Send</span>
+          <span class="shortcut">⏎</span>
+        </button>
+      </div>
+      <div class="suggestions" id="suggestions"></div>
+    </div>
+  </div>
+
+  <script src="/app.js"></script>
+</body>
+</html>
+

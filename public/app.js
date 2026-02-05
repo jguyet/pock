@@ -1,0 +1,432 @@
+// Constants
+const API_URL = 'http://localhost:8081/api';
+const AGENTS = ['user', 'project-manager', 'lead-developer', 'developer', 'tester'];
+
+// DOM Elements
+const messagesContainer = document.getElementById('messages');
+const messageInput = document.getElementById('message-input');
+const sendBtn = document.getElementById('send-btn');
+const clearBtn = document.getElementById('clear-btn');
+const suggestionsContainer = document.getElementById('suggestions');
+
+// State
+let currentProjectId = null;
+let currentProject = null;
+let mentionStart = -1;
+
+// Extract project ID from URL
+function getProjectIdFromUrl() {
+  const path = window.location.pathname;
+  const match = path.match(/\/project\/([^/]+)/);
+  return match ? match[1] : null;
+}
+
+// Load project and messages on startup
+async function initializeProject() {
+  currentProjectId = getProjectIdFromUrl();
+  
+  if (!currentProjectId) {
+    window.location.href = '/';
+    return;
+  }
+  
+  // Load project info
+  try {
+    const response = await fetch(`${API_URL}/projects/${currentProjectId}`);
+    const data = await response.json();
+    
+    if (data.success) {
+      currentProject = data.project;
+      document.getElementById('project-title').textContent = currentProject.title;
+    } else {
+      alert('Projet non trouvé');
+      window.location.href = '/';
+      return;
+    }
+  } catch (error) {
+    console.error('Error loading project:', error);
+    alert('Erreur lors du chargement du projet');
+    return;
+  }
+  
+  // Load messages
+  loadMessages();
+}
+
+initializeProject();
+
+// Event Listeners
+sendBtn.addEventListener('click', sendMessage);
+messageInput.addEventListener('keydown', handleKeyDown);
+messageInput.addEventListener('input', handleInput);
+clearBtn.addEventListener('click', clearChat);
+
+// Load messages from server
+async function loadMessages() {
+  try {
+    const url = currentProjectId 
+      ? `${API_URL}/messages?projectId=${encodeURIComponent(currentProjectId)}`
+      : `${API_URL}/messages`;
+    
+    const response = await fetch(url);
+    const data = await response.json();
+    
+    messagesContainer.innerHTML = '';
+    
+    if (data.messages && data.messages.length > 0) {
+      data.messages.forEach(msg => renderMessage(msg));
+      scrollToBottom();
+    } else {
+      showWelcomeMessage();
+    }
+  } catch (error) {
+    console.error('Error loading messages:', error);
+    showWelcomeMessage();
+  }
+}
+
+// Extract all @mentions from content
+function extractMentions(content) {
+  const matches = content.match(/@(\w+[-\w]*)/g);
+  if (!matches) return null;
+  
+  // Remove @ symbol and get unique mentions
+  const mentions = [...new Set(matches.map(m => m.substring(1)))];
+  
+  // Return array if multiple, string if single, null if none
+  if (mentions.length === 0) return null;
+  if (mentions.length === 1) return mentions[0];
+  return mentions;
+}
+
+// Remove @mentions from content
+function removeMentions(content) {
+  return content.replace(/@(\w+[-\w]*)/g, '').trim();
+}
+
+// Send message
+async function sendMessage() {
+  const originalContent = messageInput.value.trim();
+  if (!originalContent) return;
+  
+  // Extract all @mentions as "for" field
+  const forAgents = extractMentions(originalContent);
+  
+  // Remove @mentions from content
+  const content = removeMentions(originalContent);
+  
+  const message = {
+    agent: 'user',
+    content,
+    projectId: currentProjectId,
+    timestamp: new Date().toISOString()
+  };
+  
+  // Add "for" field if @mentions found
+  if (forAgents) {
+    message.for = forAgents;
+  }
+  
+  try {
+    const response = await fetch(`${API_URL}/messages`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(message)
+    });
+    
+    const data = await response.json();
+    
+    if (data.success) {
+      renderMessage(data.message);
+      messageInput.value = '';
+      messageInput.style.height = 'auto';
+      scrollToBottom();
+      
+      // Auto-execute if message has "for" field
+      if (data.message.for) {
+        console.log('Auto-executing message:', data.message.id);
+        setTimeout(() => {
+          // Call without event (auto-execution)
+          executeMessageAuto(data.message.id);
+        }, 500);
+      }
+    }
+  } catch (error) {
+    console.error('Error sending message:', error);
+    alert('Error sending message. Please try again.');
+  }
+}
+
+// Render a single message
+function renderMessage(msg) {
+  const messageDiv = document.createElement('div');
+  messageDiv.className = 'message';
+  
+  const time = new Date(msg.timestamp).toLocaleTimeString('fr-FR', {
+    hour: '2-digit',
+    minute: '2-digit'
+  });
+  
+  const agentClass = AGENTS.includes(msg.agent) ? `agent-${msg.agent}` : 'agent-custom';
+  
+  // Escape HTML in content
+  const processedContent = msg.content.replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/\n/g, '<br>');
+  
+  // Build "for" badge(s) if present
+  let forBadge = '';
+  if (msg.for) {
+    if (Array.isArray(msg.for)) {
+      // Multiple recipients
+      forBadge = msg.for.map(agent => `<span class="for-badge">→ ${agent}</span>`).join(' ');
+    } else {
+      // Single recipient
+      forBadge = `<span class="for-badge">→ ${msg.for}</span>`;
+    }
+  }
+  
+  // Build blockId badge
+  const blockBadge = msg.blockId !== undefined ? `<span class="block-badge">Block ${msg.blockId}</span>` : '';
+  
+  // Build execute button if message has "for" field
+  const executeBtn = msg.for ? `<button class="btn-execute" onclick="executeMessage(${msg.id})">🔄 Retry</button>` : '';
+  
+  messageDiv.innerHTML = `
+    <div class="message-header">
+      <span class="agent-badge ${agentClass}">${msg.agent}</span>
+      ${forBadge}
+      ${blockBadge}
+      <span class="message-time">${time}</span>
+      ${msg.projectFolder ? `<span class="message-folder">📁 ${msg.projectFolder}</span>` : ''}
+      ${executeBtn}
+    </div>
+    <div class="message-content">${processedContent}</div>
+  `;
+  
+  messagesContainer.appendChild(messageDiv);
+}
+
+// Execute a message (call Claude command) - called automatically
+async function executeMessageAuto(messageId) {
+  console.log('Executing message automatically:', messageId);
+  
+  try {
+    // Include projectFolder in query params
+    const url = currentProjectId 
+      ? `${API_URL}/process/${messageId}?projectFolder=${encodeURIComponent(currentProjectId)}`
+      : `${API_URL}/process/${messageId}`;
+    
+    const response = await fetch(url, {
+      method: 'POST'
+    });
+    
+    const data = await response.json();
+    
+    if (data.success) {
+      console.log('Message execution started');
+      
+      // Poll for new messages
+      setTimeout(() => {
+        loadMessages();
+      }, 1000);
+      
+      // Start polling every 2 seconds for updates
+      const pollInterval = setInterval(() => {
+        loadMessages();
+      }, 2000);
+      
+      // Stop polling after 60 seconds
+      setTimeout(() => {
+        clearInterval(pollInterval);
+      }, 60000);
+    }
+  } catch (error) {
+    console.error('Error executing message:', error);
+  }
+}
+
+// Execute a message (call Claude command) - called from button
+async function executeMessage(messageId) {
+  const button = event.target;
+  button.disabled = true;
+  button.textContent = '⏳ Processing...';
+  
+  try {
+    // Include projectFolder in query params
+    const url = currentProjectId 
+      ? `${API_URL}/process/${messageId}?projectFolder=${encodeURIComponent(currentProjectId)}`
+      : `${API_URL}/process/${messageId}`;
+    
+    const response = await fetch(url, {
+      method: 'POST'
+    });
+    
+    const data = await response.json();
+    
+    if (data.success) {
+      button.textContent = '✓ Retried';
+      button.style.background = '#10b981';
+      
+      // Poll for new messages
+      setTimeout(() => {
+        loadMessages();
+      }, 1000);
+      
+      // Start polling every 2 seconds for updates
+      const pollInterval = setInterval(() => {
+        loadMessages();
+      }, 2000);
+      
+      // Stop polling after 60 seconds
+      setTimeout(() => {
+        clearInterval(pollInterval);
+      }, 60000);
+    } else {
+      button.textContent = '✗ Error';
+      button.style.background = '#ef4444';
+      button.disabled = false;
+    }
+  } catch (error) {
+    console.error('Error executing message:', error);
+    button.textContent = '✗ Error';
+    button.style.background = '#ef4444';
+    button.disabled = false;
+  }
+}
+
+// Highlight @mentions in content
+function highlightMentions(content) {
+  return content.replace(/@(\w+[-\w]*)/g, '<span class="mention">@$1</span>');
+}
+
+// Show welcome message
+function showWelcomeMessage() {
+  const welcomeDiv = document.createElement('div');
+  welcomeDiv.className = 'message';
+  welcomeDiv.innerHTML = `
+    <div class="message-header">
+      <span class="agent-badge agent-custom">System</span>
+      <span class="message-time">${new Date().toLocaleTimeString('fr-FR', {hour: '2-digit', minute: '2-digit'})}</span>
+    </div>
+    <div class="message-content">
+      <strong>Bienvenue sur ${currentProject ? currentProject.title : 'votre projet'}! 🎯</strong><br><br>
+      Utilisez @ pour mentionner des agents:<br>
+      • @project-manager<br>
+      • @lead-developer<br>
+      • @developer<br>
+      • @tester<br><br>
+      Les commandes s'exécutent automatiquement après l'envoi.
+    </div>
+  `;
+  messagesContainer.appendChild(welcomeDiv);
+}
+
+// Handle keyboard shortcuts
+function handleKeyDown(e) {
+  // Enter to send (without Shift)
+  if (e.key === 'Enter' && !e.shiftKey) {
+    e.preventDefault();
+    sendMessage();
+  }
+  
+  // Tab for autocomplete
+  if (e.key === 'Tab' && mentionStart !== -1) {
+    e.preventDefault();
+    // TODO: Implement autocomplete
+  }
+}
+
+// Handle input changes for @ mentions
+function handleInput(e) {
+  const value = e.target.value;
+  const cursorPos = e.target.selectionStart;
+  
+  // Check for @ symbol
+  const beforeCursor = value.substring(0, cursorPos);
+  const lastAtIndex = beforeCursor.lastIndexOf('@');
+  
+  if (lastAtIndex !== -1) {
+    const afterAt = beforeCursor.substring(lastAtIndex + 1);
+    
+    // Check if we're still in a mention (no spaces after @)
+    if (!afterAt.includes(' ') && !afterAt.includes('\n')) {
+      mentionStart = lastAtIndex;
+      showSuggestions(afterAt);
+      return;
+    }
+  }
+  
+  mentionStart = -1;
+  suggestionsContainer.innerHTML = '';
+}
+
+// Show agent suggestions
+function showSuggestions(query) {
+  const matches = AGENTS.filter(agent => 
+    agent.toLowerCase().includes(query.toLowerCase())
+  );
+  
+  if (matches.length === 0) {
+    suggestionsContainer.innerHTML = '';
+    return;
+  }
+  
+  suggestionsContainer.innerHTML = matches.map(agent => 
+    `<div class="suggestion" onclick="insertSuggestion('${agent}')">@${agent}</div>`
+  ).join('');
+}
+
+// Insert suggestion
+function insertSuggestion(agent) {
+  const value = messageInput.value;
+  const beforeMention = value.substring(0, mentionStart);
+  const afterMention = value.substring(messageInput.selectionStart);
+  
+  messageInput.value = beforeMention + '@' + agent + ' ' + afterMention;
+  messageInput.focus();
+  
+  const newCursorPos = beforeMention.length + agent.length + 2;
+  messageInput.setSelectionRange(newCursorPos, newCursorPos);
+  
+  mentionStart = -1;
+  suggestionsContainer.innerHTML = '';
+}
+
+
+// Clear chat
+async function clearChat() {
+  if (!confirm('Are you sure you want to clear all chat history for this project?')) {
+    return;
+  }
+  
+  try {
+    const url = currentProjectId 
+      ? `${API_URL}/messages?projectId=${encodeURIComponent(currentProjectId)}`
+      : `${API_URL}/messages`;
+    
+    const response = await fetch(url, {
+      method: 'DELETE'
+    });
+    
+    const data = await response.json();
+    
+    if (data.success) {
+      messagesContainer.innerHTML = '';
+      showWelcomeMessage();
+    }
+  } catch (error) {
+    console.error('Error clearing chat:', error);
+    alert('Error clearing chat');
+  }
+}
+
+// Scroll to bottom
+function scrollToBottom() {
+  messagesContainer.parentElement.scrollTop = messagesContainer.parentElement.scrollHeight;
+}
+
+// Auto-resize textarea
+messageInput.addEventListener('input', function() {
+  this.style.height = 'auto';
+  this.style.height = Math.min(this.scrollHeight, 200) + 'px';
+});
+

@@ -35,11 +35,30 @@ Ou en mode développement avec auto-reload :
 npm run dev
 ```
 
-2. Ouvrez votre navigateur à l'adresse :
+2. Démarrez Ollama (requis pour l'extraction JSON) :
+
+```bash
+ollama serve
+```
+
+3. Ouvrez votre navigateur à l'adresse :
 
 ```
-http://localhost:8080
+http://localhost:8081
 ```
+
+### Navigation
+
+- **Homepage** (`/`) - Liste de tous vos projets
+- **Projet** (`/project/:id`) - Chat d'un projet spécifique
+
+### Workflow
+
+1. **Créer un projet** - Cliquez sur "Nouveau Projet" sur la homepage
+2. **Accéder au chat** - Cliquez sur un projet pour accéder à son chat
+3. **Communiquer** - Mentionnez des agents avec `@agent-name`
+4. **Exécution auto** - Les commandes Claude s'exécutent automatiquement
+5. **Retour homepage** - Cliquez sur 🏠 dans l'en-tête
 
 ## Structure du projet
 
@@ -53,17 +72,29 @@ pock/
 │   │   └── OllamaMiddleware.js        # Middleware Ollama pour extraction JSON
 │   ├── services/
 │   │   ├── BlockService.js            # Service de gestion des blocks
-│   │   └── ChatService.js             # Service de gestion des chat.json
+│   │   ├── ChatService.js             # Service de gestion des chat.json
+│   │   └── ProjectService.js          # Service de gestion des projets
 │   └── routes/
 │       ├── messages.js                # Routes API pour les messages
 │       ├── processor.js               # Routes API pour le traitement
-│       └── projects.js                # Routes API pour les projets
+│       ├── projects.js                # Routes API pour les dossiers
+│       └── projects-crud.js           # Routes API CRUD pour les projets
 ├── public/
-│   ├── index.html                     # Interface HTML
-│   ├── styles.css                     # Styles CSS
-│   └── app.js                         # Logique JavaScript côté client
-├── package.json                        # Dépendances du projet
-├── chat.json                          # Historique des messages (créé automatiquement)
+│   ├── index.html                     # Homepage - liste des projets
+│   ├── chat.html                      # Page de chat d'un projet
+│   ├── home.js                        # Logique JavaScript homepage
+│   ├── app.js                         # Logique JavaScript chat
+│   └── styles.css                     # Styles CSS
+├── projects/                          # Dossier des projets (git ignored)
+│   ├── <project-id>/
+│   │   ├── chat.json                  # Historique du projet
+│   │   ├── OBJECTIVE.md               # Objectifs du projet
+│   │   ├── TEAM.md                    # Structure de l'équipe
+│   │   ├── METRICS.md                 # Métriques
+│   │   └── block/                     # Dossier des blocks
+│   └── ...
+├── projects.json                      # Index des projets (git ignored)
+├── package.json                       # Dépendances du projet
 └── README.md                          # Ce fichier
 ```
 
