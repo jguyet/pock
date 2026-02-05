@@ -127,6 +127,25 @@ class ChatService {
     return data.messages.find(m => m.id === messageId) || null;
   }
 
+
+  /**
+   * Edit a message by ID
+   * 
+   * @param {string} projectId - Project ID
+   * @param {Object} message - Message object
+   * @returns {Object} Edited message
+   */
+  static editMessage(projectId, message) {
+    const data = this.readMessages(projectId);
+    const index = data.messages.findIndex(m => m.id === message.id);
+    if (index !== -1) {
+      data.messages[index] = message;
+      this.writeMessages(projectId, data);
+      return message;
+    }
+    return null;
+  }
+
   /**
    * Clear all messages
    * 

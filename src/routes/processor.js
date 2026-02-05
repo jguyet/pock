@@ -2,15 +2,38 @@ const express = require('express');
 const MessageProcessor = require('../processor/MessageProcessor');
 const BlockService = require('../services/BlockService');
 const ChatService = require('../services/ChatService');
-const OllamaMiddleware = require('../middleware-agents/OllamaMiddleware');
+const ProjectService = require('../services/ProjectService');
+const { jsonrepair } = require('jsonrepair');
 
 const router = express.Router();
 
-// Initialize Ollama middleware
-const ollamaMiddleware = new OllamaMiddleware({
-  ollamaUrl: 'http://localhost:11434',
-  model: 'erukude/omni-json:1b'
-});
+/**
+ * Extract JSON from text using jsonrepair
+ */
+function extractJson(text) {
+  try {
+    // Try to find JSON in the text (look for { or [ at the start)
+    const jsonMatch = text.match(/(\{[\s\S]*\}|\[[\s\S]*\])/);
+    
+    if (!jsonMatch) {
+      console.log('[Processor] No JSON found in output');
+      return null;
+    }
+    
+    const jsonText = jsonMatch[0];
+    console.log('[Processor] Found JSON in output, attempting to repair...');
+    
+    // Use jsonrepair to fix any JSON syntax issues
+    const repairedJson = jsonrepair(jsonText);
+    const parsed = JSON.parse(repairedJson);
+    
+    console.log('[Processor] Successfully parsed JSON:', parsed);
+    return parsed;
+  } catch (error) {
+    console.error('[Processor] Error extracting/repairing JSON:', error.message);
+    return null;
+  }
+}
 
 /**
  * Execute message in background (async, non-blocking)
@@ -22,86 +45,61 @@ async function executeInBackground(message, messageId) {
     const processor = new MessageProcessor(message);
     const result = await processor.execute();
     
-    console.log(`[Background] Command executed, processing with Ollama middleware...`);
+    console.log(`[Background] Command executed, extracting JSON...`);
     
-    // Process output through Ollama middleware to extract JSON
-    const processedResult = await ollamaMiddleware.process(result.output.trim());
-    
-    let finalContentText = '';
-    let finalContentJson = null;
-    let extractedFields = null;
-    
-    if (processedResult.success && processedResult.parsed) {
-      console.log(`[Background] Successfully extracted JSON via Ollama`);
-      
-      // Extract fields from JSON (for, blockId, response)
-      extractedFields = ollamaMiddleware.extractFields(processedResult);
-      
-      // Use the 'response' field as content, or fall back to full JSON string
-      finalContentText = extractedFields.response || processedResult.content;
-
-      try {
-        finalContentJson = JSON.parse(finalContentText);
-        console.log(`[Background] Parsed JSON:`, finalContentJson);
-      } catch (error) {
-        console.error(`[Background] Error parsing JSON:`, error);
-        finalContentJson = null;
-      }
-      
-      console.log(`[Background] Extracted fields:`, extractedFields);
-    } else {
-      console.log(`[Background] Using raw output (Ollama processing failed or returned unparsed)`);
-      finalContentText = processedResult.content;
-    }
+    // Extract and repair JSON from output
+    let jsonData = extractJson(result.output.trim());
     
     // Determine response agent
     const responseAgent = Array.isArray(message.for) ? message.for[0] : message.for || 'system';
     
-    let responseMessage = null;
-
     // Get project folder for blockId detection
-    const projectFolder = ChatService.getProjectFolder(message.projectId);
+    const projectFolder = ProjectService.getProjectFolder(message.projectId);
     
-    if (finalContentJson) {
-      responseMessage = {
-        id: Date.now(),
-        agent: responseAgent,
-        content: finalContentJson.response,
-        projectId: message.projectId,
-        blockId: BlockService.getCurrentBlockId(projectFolder),
-        timestamp: new Date().toISOString(),
-        inReplyTo: messageId,
-        for: finalContentJson.for,
-      };
+    let responseMessage = null;
+    
+    if (jsonData) {
+
+      jsonData = Array.isArray(jsonData) ? jsonData : [jsonData];
+
+      console.log('[Background] JSON data:', jsonData);
+
+      for (const data of jsonData) {
+        responseMessage = {
+          id: Date.now(),
+          agent: responseAgent,
+          content: data.response,
+          projectId: message.projectId,
+          blockId: BlockService.getCurrentBlockId(projectFolder),
+          timestamp: new Date().toISOString(),
+          inReplyTo: messageId,
+          for: data.for || null,
+        };
+        ChatService.addMessage(message.projectId, responseMessage);
+      }
     } else {
+
+      console.log('[Background] No JSON data:', result.output.trim());
+      // No JSON found, use raw output
+      // console.log('[Background] Using raw output (no JSON found)');
       responseMessage = {
         id: Date.now(),
         agent: responseAgent,
-        content: finalContentText,
+        content: result.output.trim(),
         projectId: message.projectId,
         blockId: BlockService.getCurrentBlockId(projectFolder),
         timestamp: new Date().toISOString(),
         inReplyTo: messageId
       };
-      // Add extracted fields as metadata if available
-      if (extractedFields) {
-        responseMessage.metadata = {
-          extractedFor: extractedFields.for,
-          extractedBlockId: extractedFields.blockId,
-          extractedAction: extractedFields.action,
-          extractedExecutionOrder: extractedFields.executionOrder
-        };
-      }
+      ChatService.addMessage(message.projectId, responseMessage);
     }
-    
-    ChatService.addMessage(message.projectId, responseMessage);
     
     console.log(`[Background] Claude command completed successfully for message ${messageId}`);
   } catch (error) {
     console.error(`[Background] Error executing claude command for message ${messageId}:`, error);
     
     // Add error message to chat
-    const projectFolder = ChatService.getProjectFolder(message.projectId);
+    const projectFolder = ProjectService.getProjectFolder(message.projectId);
     const errorMessage = {
       id: Date.now(),
       agent: 'system',

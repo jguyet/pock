@@ -7,18 +7,21 @@
     "start": "node src/server.js",
     "dev": "nodemon src/server.js"
   },
-  "keywords": ["chat", "agent", "nodejs"],
+  "keywords": [
+    "chat",
+    "agent",
+    "nodejs"
+  ],
   "author": "",
   "license": "MIT",
   "dependencies": {
-    "express": "^4.18.2",
     "body-parser": "^1.20.2",
     "cors": "^2.8.5",
-    "axios": "^1.6.0",
+    "express": "^4.18.2",
+    "jsonrepair": "^3.13.2",
     "uuid": "^9.0.0"
   },
   "devDependencies": {
     "nodemon": "^3.0.1"
   }
 }
-

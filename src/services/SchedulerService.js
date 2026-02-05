@@ -2,7 +2,33 @@ const ProjectService = require('./ProjectService');
 const ChatService = require('./ChatService');
 const MessageProcessor = require('../processor/MessageProcessor');
 const BlockService = require('./BlockService');
-const OllamaMiddleware = require('../middleware-agents/OllamaMiddleware');
+const { jsonrepair } = require('jsonrepair');
+
+
+function extractJson(text) {
+    try {
+      // Try to find JSON in the text (look for { or [ at the start)
+      const jsonMatch = text.match(/(\{[\s\S]*\}|\[[\s\S]*\])/);
+      
+      if (!jsonMatch) {
+        console.log('[Processor] No JSON found in output');
+        return null;
+      }
+      
+      const jsonText = jsonMatch[0];
+      console.log('[Processor] Found JSON in output, attempting to repair...');
+      
+      // Use jsonrepair to fix any JSON syntax issues
+      const repairedJson = jsonrepair(jsonText);
+      const parsed = JSON.parse(repairedJson);
+      
+      console.log('[Processor] Successfully parsed JSON:', parsed);
+      return parsed;
+    } catch (error) {
+      console.error('[Processor] Error extracting/repairing JSON:', error.message);
+      return null;
+    }
+  }
 
 /**
  * SchedulerService - Service to automatically process messages
@@ -16,10 +42,6 @@ class SchedulerService {
   constructor() {
     this.interval = null;
     this.processedMessages = new Set(); // Track processed message IDs
-    this.ollamaMiddleware = new OllamaMiddleware({
-      ollamaUrl: 'http://localhost:11434',
-      model: 'erukude/omni-json:1b'
-    });
   }
 
   /**
@@ -137,111 +159,158 @@ class SchedulerService {
   }
 
   /**
+   * Extract JSON from text using jsonrepair
+   * 
+   * @param {string} text - Raw text output
+   * @returns {Object|null} Parsed JSON or null
+   */
+  extractJson(text) {
+    try {
+      // Try to find JSON in the text (look for { or [ at the start)
+      const jsonMatch = text.match(/(\{[\s\S]*\}|\[[\s\S]*\])/);
+      
+      if (!jsonMatch) {
+        console.log('[Scheduler] No JSON found in output');
+        return null;
+      }
+      
+      const jsonText = jsonMatch[0];
+      console.log('[Scheduler] Found JSON in output, attempting to repair...');
+      
+      // Use jsonrepair to fix any JSON syntax issues
+      const repairedJson = jsonrepair(jsonText);
+      const parsed = JSON.parse(repairedJson);
+      
+      console.log('[Scheduler] Successfully parsed JSON:', parsed);
+      return parsed;
+    } catch (error) {
+      console.error('[Scheduler] Error extracting/repairing JSON:', error.message);
+      return null;
+    }
+  }
+  /**
    * Process a message (execute claude command)
    * 
    * @param {Object} message - Message to process
    * @param {string} projectId - Project ID
    */
   async processMessage(message, projectId) {
-    console.log(`[Scheduler] Starting execution for message ${message.id}`);
-    
-    try {
-      const processor = new MessageProcessor(message);
-      const result = await processor.execute();
-      
-      console.log(`[Scheduler] Command executed, processing with Ollama middleware...`);
-      
-      // Process output through Ollama middleware to extract JSON
-      const processedResult = await this.ollamaMiddleware.process(result.output.trim());
-      
-      let finalContentText = '';
-      let finalContentJson = null;
-      let extractedFields = null;
-      
-      if (processedResult.success && processedResult.parsed) {
-        console.log(`[Scheduler] Successfully extracted JSON via Ollama`);
-        
-        // Extract fields from JSON (for, blockId, response)
-        extractedFields = this.ollamaMiddleware.extractFields(processedResult);
-        
-        // Use the 'response' field as content, or fall back to full JSON string
-        finalContentText = extractedFields.response || processedResult.content;
+        console.log(`[Background] Starting execution for message ${message.id}`);
 
+        if (message.status == 'processing' || message.status == 'completed' || message.status == 'waiting') {
+            console.log(`[Background] Message ${message.id} already processed`);
+            return;
+        }
+        
         try {
-          finalContentJson = JSON.parse(finalContentText);
-          console.log(`[Scheduler] Parsed JSON:`, finalContentJson);
-        } catch (error) {
-          console.error(`[Scheduler] Error parsing JSON:`, error);
-          finalContentJson = null;
-        }
-        
-        console.log(`[Scheduler] Extracted fields:`, extractedFields);
-      } else {
-        console.log(`[Scheduler] Using raw output (Ollama processing failed or returned unparsed)`);
-        finalContentText = processedResult.content;
-      }
-      
-      // Determine response agent
-      const responseAgent = Array.isArray(message.for) ? message.for[0] : message.for || 'system';
-      
-      let responseMessage = null;
 
-      // Get project folder for blockId detection
-      const projectFolder = ProjectService.getProjectFolder(message.projectId);
-      
-      if (finalContentJson) {
-        responseMessage = {
-          id: Date.now(),
-          agent: responseAgent,
-          content: finalContentJson.response,
-          projectId: message.projectId,
-          blockId: BlockService.getCurrentBlockId(projectFolder),
-          timestamp: new Date().toISOString(),
-          inReplyTo: message.id,
-          for: finalContentJson.for,
-        };
-      } else {
-        responseMessage = {
-          id: Date.now(),
-          agent: responseAgent,
-          content: finalContentText,
-          projectId: message.projectId,
-          blockId: BlockService.getCurrentBlockId(projectFolder),
-          timestamp: new Date().toISOString(),
-          inReplyTo: message.id
-        };
-        // Add extracted fields as metadata if available
-        if (extractedFields) {
-          responseMessage.metadata = {
-            extractedFor: extractedFields.for,
-            extractedBlockId: extractedFields.blockId,
-            extractedAction: extractedFields.action,
-            extractedExecutionOrder: extractedFields.executionOrder
-          };
+            message.status = 'processing';
+            ChatService.editMessage(message.projectId, message);
+
+            const processor = new MessageProcessor(message);
+            const result = await processor.execute();
+
+            message.status = 'completed';
+            ChatService.editMessage(message.projectId, message);
+            
+            console.log(`[Background] Command executed, extracting JSON...`);
+            
+            // Extract and repair JSON from output
+            let jsonData = extractJson(result.output.trim());
+            
+            // Determine response agent
+            const responseAgent = Array.isArray(message.for) ? message.for[0] : message.for || 'system';
+            
+            // Get project folder for blockId detection
+            const projectFolder = ProjectService.getProjectFolder(message.projectId);
+            
+            let responseMessage = null;
+            
+            if (jsonData) {
+        
+                jsonData = Array.isArray(jsonData) ? jsonData : [jsonData];
+        
+                console.log('[Background] JSON data:', jsonData);
+        
+                for (const data of jsonData) {
+
+                    if (data.action == 'execute') {
+                        for (const agent of data.executionOrder) {
+                            responseMessage = {
+                                id: Date.now(),
+                                agent: agent,
+                                content: "",
+                                projectId: message.projectId,
+                                blockId: data.blockId,
+                                timestamp: new Date().toISOString(),
+                                inReplyTo: message.id,
+                                for: agent,
+                            };
+                            ChatService.addMessage(message.projectId, responseMessage);
+                            await this.processMessage(responseMessage, message.projectId);
+                        }
+                    } if (data.action == 'ask-to-user') {
+                        responseMessage = {
+                            id: Date.now(),
+                            agent: responseAgent,
+                            content: data.message,
+                            projectId: message.projectId,
+                            blockId: data.blockId,
+                            timestamp: new Date().toISOString(),
+                            inReplyTo: message.id,
+                            for: 'user',
+                        };
+                        ChatService.addMessage(message.projectId, responseMessage);
+                    } else {
+                        responseMessage = {
+                            id: Date.now(),
+                            agent: responseAgent,
+                            content: data.response,
+                            projectId: message.projectId,
+                            blockId: data.blockId,
+                            timestamp: new Date().toISOString(),
+                            inReplyTo: message.id,
+                            for: data.for || null,
+                        };
+                        ChatService.addMessage(message.projectId, responseMessage);
+                    }
+                }
+            } else {
+        
+                console.log('[Background] No JSON data:', result.output.trim());
+                // No JSON found, use raw output
+                // console.log('[Background] Using raw output (no JSON found)');
+                responseMessage = {
+                    id: Date.now(),
+                    agent: responseAgent,
+                    content: result.output.trim(),
+                    projectId: message.projectId,
+                    blockId: BlockService.getCurrentBlockId(projectFolder),
+                    timestamp: new Date().toISOString(),
+                    inReplyTo: message.id
+                };
+                ChatService.addMessage(message.projectId, responseMessage);
+            }
+            
+            console.log(`[Background] Claude command completed successfully for message ${message.id}`);
+            } catch (error) {
+            console.error(`[Background] Error executing claude command for message ${message.id}:`, error);
+            
+            // Add error message to chat
+            const projectFolder = ProjectService.getProjectFolder(message.projectId);
+            const errorMessage = {
+                id: Date.now(),
+                agent: 'system',
+                content: `Error executing command: ${error.error || error.output || 'Unknown error'}`,
+                projectId: message.projectId,
+                blockId: BlockService.getCurrentBlockId(projectFolder),
+                timestamp: new Date().toISOString(),
+                inReplyTo: message.id
+            };
+            
+            ChatService.addMessage(message.projectId, errorMessage);
         }
-      }
-      
-      ChatService.addMessage(message.projectId, responseMessage);
-      
-      console.log(`[Scheduler] Claude command completed successfully for message ${message.id}`);
-    } catch (error) {
-      console.error(`[Scheduler] Error executing claude command for message ${message.id}:`, error);
-      
-      // Add error message to chat
-      const projectFolder = ProjectService.getProjectFolder(message.projectId);
-      const errorMessage = {
-        id: Date.now(),
-        agent: 'system',
-        content: `Error executing command: ${error.error || error.output || 'Unknown error'}`,
-        projectId: message.projectId,
-        blockId: BlockService.getCurrentBlockId(projectFolder),
-        timestamp: new Date().toISOString(),
-        inReplyTo: message.id
-      };
-      
-      ChatService.addMessage(message.projectId, errorMessage);
     }
-  }
 
   /**
    * Clear processed messages cache
