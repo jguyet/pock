@@ -47,13 +47,20 @@ function renderProjects(projects) {
       <div class="project-card-header">
         <h3 class="project-title">${escapeHtml(project.title)}</h3>
         <div class="project-actions">
-          <button class="btn-delete" onclick="deleteProject(event, '${project.id}')" title="Supprimer">🗑️</button>
+          <button class="btn-delete" onclick="deleteProject(event, '${project.id}')" title="Supprimer">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+              <polyline points="3 6 5 6 21 6" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+              <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+              <line x1="10" y1="11" x2="10" y2="17" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+              <line x1="14" y1="11" x2="14" y2="17" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+            </svg>
+          </button>
         </div>
       </div>
       ${project.description ? `<div class="project-description">${escapeHtml(project.description)}</div>` : ''}
       <div class="project-meta">
-        <span>Créé: ${createdDate}</span>
-        <span>Modifié: ${updatedDate}</span>
+        <span>📅 ${createdDate}</span>
+        <span>🔄 ${updatedDate}</span>
       </div>
     `;
 
@@ -158,4 +165,36 @@ document.getElementById('new-project-modal').addEventListener('click', (e) => {
     closeNewProjectModal();
   }
 });
+
+// ==================== Theme Toggle ====================
+const themeToggle = document.getElementById('theme-toggle');
+const iconMoon = document.querySelector('.icon-moon');
+const iconSun = document.querySelector('.icon-sun');
+const html = document.documentElement;
+
+// Load saved theme or default to light
+const savedTheme = localStorage.getItem('theme') || 'light';
+html.setAttribute('data-theme', savedTheme);
+updateThemeIcon(savedTheme);
+
+// Toggle theme
+themeToggle.addEventListener('click', () => {
+  const currentTheme = html.getAttribute('data-theme');
+  const newTheme = currentTheme === 'dark' ? 'light' : 'dark';
+  
+  html.setAttribute('data-theme', newTheme);
+  localStorage.setItem('theme', newTheme);
+  updateThemeIcon(newTheme);
+});
+
+// Update theme icon
+function updateThemeIcon(theme) {
+  if (theme === 'dark') {
+    iconMoon.style.display = 'none';
+    iconSun.style.display = 'block';
+  } else {
+    iconMoon.style.display = 'block';
+    iconSun.style.display = 'none';
+  }
+}
 
