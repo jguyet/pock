@@ -47,7 +47,7 @@ class BlockService {
         const blockContent = fs.readFileSync(lastBlockFile, 'utf8');
         
         // Check if the file contains "Status: COMPLETED"
-        if (/Status:\s*COMPLETED/i.test(blockContent)) {
+        if (/Status:\s*COMPLETED/i.test(blockContent) || /Status:\s*CLOSED/i.test(blockContent) || /Status:\s*DONE/i.test(blockContent)) {
           // If completed, move to next block
           return lastBlockId + 1;
         }
@@ -81,7 +81,7 @@ class BlockService {
     
     try {
       const content = fs.readFileSync(blockFile, 'utf8');
-      return /Status:\s*COMPLETED/i.test(content);
+      return /Status:\s*COMPLETED/i.test(content) || /Status:\s*CLOSED/i.test(content) || /Status:\s*DONE/i.test(content);
     } catch (error) {
       console.error('Error checking block completion:', error);
       return false;

@@ -132,10 +132,10 @@ class MessageProcessor {
 
       // Timeout de sécurité (5 minutes)
       const timeout = setTimeout(() => {
-        console.log('[EXECUTE] TIMEOUT - Killing process after 5 minutes');
+        console.log('[EXECUTE] TIMEOUT - Killing process after 60 minutes');
         spawnProcess.kill();
-        reject({ success: false, error: 'Command timeout after 5 minutes' });
-      }, 5 * 60 * 1000);
+        reject({ success: false, error: 'Command timeout after 60 minutes' });
+      }, 60 * 60 * 1000);
 
       spawnProcess.on('close', () => {
         clearTimeout(timeout);

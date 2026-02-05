@@ -13,6 +13,7 @@ const suggestionsContainer = document.getElementById('suggestions');
 let currentProjectId = null;
 let currentProject = null;
 let mentionStart = -1;
+let currentMessages = []; // Keep track of current messages to avoid flickering
 
 // Extract project ID from URL
 function getProjectIdFromUrl() {
@@ -51,6 +52,11 @@ async function initializeProject() {
   
   // Load messages
   loadMessages();
+  
+  // Auto-refresh messages every 1 second to see status updates
+  setInterval(() => {
+    loadMessages();
+  }, 1000);
 }
 
 initializeProject();
@@ -71,53 +77,185 @@ async function loadMessages() {
     const response = await fetch(url);
     const data = await response.json();
     
-    messagesContainer.innerHTML = '';
+    if (!data.messages || data.messages.length === 0) {
+      if (currentMessages.length === 0) {
+        messagesContainer.innerHTML = '';
+        showWelcomeMessage();
+      }
+      return;
+    }
     
-    if (data.messages && data.messages.length > 0) {
+    // If this is the first load, render all messages
+    if (currentMessages.length === 0) {
+      messagesContainer.innerHTML = '';
       data.messages.forEach(msg => renderMessage(msg));
+      currentMessages = data.messages;
       scrollToBottom();
-    } else {
-      showWelcomeMessage();
+      return;
+    }
+    
+    // Check for new or updated messages
+    const shouldScroll = isScrolledToBottom();
+    
+    data.messages.forEach((newMsg, index) => {
+      const oldMsg = currentMessages[index];
+      
+      // New message added
+      if (!oldMsg) {
+        renderMessage(newMsg);
+        currentMessages.push(newMsg);
+      } 
+      // Message updated (check if status or content changed)
+      else if (hasMessageChanged(oldMsg, newMsg)) {
+        updateMessage(newMsg);
+        currentMessages[index] = newMsg;
+      }
+    });
+    
+    // Remove deleted messages (if any)
+    if (currentMessages.length > data.messages.length) {
+      const messagesToRemove = currentMessages.length - data.messages.length;
+      for (let i = 0; i < messagesToRemove; i++) {
+        const msgDiv = messagesContainer.lastElementChild;
+        if (msgDiv) msgDiv.remove();
+      }
+      currentMessages = data.messages;
+    }
+    
+    if (shouldScroll) {
+      scrollToBottom();
     }
   } catch (error) {
     console.error('Error loading messages:', error);
-    showWelcomeMessage();
+    if (currentMessages.length === 0) {
+      showWelcomeMessage();
+    }
   }
+}
+
+// Check if a message has changed
+function hasMessageChanged(oldMsg, newMsg) {
+  return oldMsg.status !== newMsg.status || 
+         oldMsg.content !== newMsg.content ||
+         oldMsg.agent !== newMsg.agent;
+}
+
+// Update an existing message in the DOM
+function updateMessage(msg) {
+  const messageDiv = messagesContainer.querySelector(`[data-message-id="${msg.id}"]`);
+  if (!messageDiv) return;
+  
+  const time = new Date(msg.timestamp).toLocaleTimeString('fr-FR', {
+    hour: '2-digit',
+    minute: '2-digit'
+  });
+  
+  const agentClass = AGENTS.includes(msg.agent) ? `agent-${msg.agent}` : 'agent-custom';
+  
+  // Update status class
+  messageDiv.className = 'message';
+  if (msg.status) {
+    messageDiv.classList.add(`status-${msg.status}`);
+  }
+  
+  // Escape HTML in content (handle empty content)
+  const processedContent = msg.content 
+    ? msg.content.replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/\n/g, '<br>')
+    : '';
+  
+  // Build "for" badge(s) if present
+  let forBadge = '';
+  if (msg.for) {
+    if (Array.isArray(msg.for)) {
+      forBadge = msg.for.map(agent => `<span class="for-badge">→ ${agent}</span>`).join(' ');
+    } else {
+      forBadge = `<span class="for-badge">→ ${msg.for}</span>`;
+    }
+  }
+  
+  // Build blockId badge
+  const blockBadge = msg.blockId !== undefined ? `<span class="block-badge">Block ${msg.blockId}</span>` : '';
+  
+  // Build status badge with loading indicator
+  let statusBadge = '';
+  if (msg.status) {
+    const statusIcons = {
+      'processing': '⚙️',
+      'waiting': '⏳',
+      'completed': '✅',
+      'error': '❌'
+    };
+    const statusLabels = {
+      'processing': 'En cours',
+      'waiting': 'En attente',
+      'completed': 'Terminé',
+      'error': 'Erreur'
+    };
+    const icon = statusIcons[msg.status] || '📝';
+    const label = statusLabels[msg.status] || msg.status;
+    
+    const spinner = (msg.status === 'processing' || msg.status === 'waiting') 
+      ? '<span class="spinner"></span>' 
+      : '';
+    
+    statusBadge = `<span class="status-badge status-${msg.status}">${spinner}${icon} ${label}</span>`;
+  }
+  
+  const executeBtn = msg.for ? `<button class="btn-execute" onclick="executeMessage(${msg.id})">🔄 Retry</button>` : '';
+  
+  messageDiv.innerHTML = `
+    <div class="message-header">
+      <span class="agent-badge ${agentClass}">${msg.agent}</span>
+      ${forBadge}
+      ${blockBadge}
+      ${statusBadge}
+      <span class="message-time">${time}</span>
+      ${msg.projectFolder ? `<span class="message-folder">📁 ${msg.projectFolder}</span>` : ''}
+      ${executeBtn}
+    </div>
+    <div class="message-content">${processedContent || '<span class="empty-content"></span>'}</div>
+  `;
+}
+
+// Check if scrolled to bottom
+function isScrolledToBottom() {
+  const container = messagesContainer.parentElement;
+  return container.scrollHeight - container.scrollTop <= container.clientHeight + 100;
 }
 
 // Extract all @mentions from content
 function extractMentions(content) {
-  const matches = content.match(/@(\w+[-\w]*)/g);
-  if (!matches) return null;
+  // Match @ only if at start of line or preceded by whitespace (not in email addresses)
+  const regex = /(^|\s)@([\w-]+)/g;
+  const matches = [];
+  let match;
   
-  // Remove @ symbol and get unique mentions
-  const mentions = [...new Set(matches.map(m => m.substring(1)))];
+  while ((match = regex.exec(content)) !== null) {
+    matches.push(match[2]); // Group 2 contains the mention name without @
+  }
   
-  // Return array if multiple, string if single, null if none
-  if (mentions.length === 0) return null;
-  if (mentions.length === 1) return mentions[0];
-  return mentions;
+  if (matches.length === 0) return null;
+  
+  // Get unique mentions
+  const uniqueMentions = [...new Set(matches)];
+  
+  // Return array if multiple, string if single
+  if (uniqueMentions.length === 1) return uniqueMentions[0];
+  return uniqueMentions;
 }
 
-// Remove @mentions from content
-function removeMentions(content) {
-  return content.replace(/@(\w+[-\w]*)/g, '').trim();
-}
 
 // Send message
 async function sendMessage() {
-  const originalContent = messageInput.value.trim();
-  if (!originalContent) return;
+  const content = messageInput.value.trim();
+  if (!content) return;
   
-  // Extract all @mentions as "for" field
-  const forAgents = extractMentions(originalContent);
-  
-  // Remove @mentions from content
-  const content = removeMentions(originalContent);
+  // Extract all @mentions as "for" field (but keep them in content)
+  const forAgents = extractMentions(content);
   
   const message = {
     agent: 'user',
-    content,
+    content, // Keep the @mentions in the content
     projectId: currentProjectId,
     timestamp: new Date().toISOString()
   };
@@ -138,6 +276,7 @@ async function sendMessage() {
     
     if (data.success) {
       renderMessage(data.message);
+      currentMessages.push(data.message); // Add to current messages to avoid duplication
       messageInput.value = '';
       messageInput.style.height = 'auto';
       scrollToBottom();
@@ -161,6 +300,12 @@ async function sendMessage() {
 function renderMessage(msg) {
   const messageDiv = document.createElement('div');
   messageDiv.className = 'message';
+  messageDiv.setAttribute('data-message-id', msg.id);
+  
+  // Add status class if present
+  if (msg.status) {
+    messageDiv.classList.add(`status-${msg.status}`);
+  }
   
   const time = new Date(msg.timestamp).toLocaleTimeString('fr-FR', {
     hour: '2-digit',
@@ -169,8 +314,10 @@ function renderMessage(msg) {
   
   const agentClass = AGENTS.includes(msg.agent) ? `agent-${msg.agent}` : 'agent-custom';
   
-  // Escape HTML in content
-  const processedContent = msg.content.replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/\n/g, '<br>');
+  // Escape HTML in content (handle empty content)
+  const processedContent = msg.content 
+    ? msg.content.replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/\n/g, '<br>')
+    : '';
   
   // Build "for" badge(s) if present
   let forBadge = '';
@@ -187,6 +334,32 @@ function renderMessage(msg) {
   // Build blockId badge
   const blockBadge = msg.blockId !== undefined ? `<span class="block-badge">Block ${msg.blockId}</span>` : '';
   
+  // Build status badge with loading indicator
+  let statusBadge = '';
+  if (msg.status) {
+    const statusIcons = {
+      'processing': '⚙️',
+      'waiting': '⏳',
+      'completed': '✅',
+      'error': '❌'
+    };
+    const statusLabels = {
+      'processing': 'En cours',
+      'waiting': 'En attente',
+      'completed': 'Terminé',
+      'error': 'Erreur'
+    };
+    const icon = statusIcons[msg.status] || '📝';
+    const label = statusLabels[msg.status] || msg.status;
+    
+    // Add spinner for processing/waiting
+    const spinner = (msg.status === 'processing' || msg.status === 'waiting') 
+      ? '<span class="spinner"></span>' 
+      : '';
+    
+    statusBadge = `<span class="status-badge status-${msg.status}">${spinner}${icon} ${label}</span>`;
+  }
+  
   // Build execute button if message has "for" field
   const executeBtn = msg.for ? `<button class="btn-execute" onclick="executeMessage(${msg.id})">🔄 Retry</button>` : '';
   
@@ -195,11 +368,12 @@ function renderMessage(msg) {
       <span class="agent-badge ${agentClass}">${msg.agent}</span>
       ${forBadge}
       ${blockBadge}
+      ${statusBadge}
       <span class="message-time">${time}</span>
       ${msg.projectFolder ? `<span class="message-folder">📁 ${msg.projectFolder}</span>` : ''}
       ${executeBtn}
     </div>
-    <div class="message-content">${processedContent}</div>
+    <div class="message-content">${processedContent || '<span class="empty-content"></span>'}</div>
   `;
   
   messagesContainer.appendChild(messageDiv);
@@ -410,6 +584,7 @@ async function clearChat() {
     const data = await response.json();
     
     if (data.success) {
+      currentMessages = []; // Reset current messages
       messagesContainer.innerHTML = '';
       showWelcomeMessage();
     }

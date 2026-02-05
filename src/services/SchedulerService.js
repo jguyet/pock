@@ -197,13 +197,15 @@ class SchedulerService {
   async processMessage(message, projectId) {
         console.log(`[Background] Starting execution for message ${message.id}`);
 
-        if (message.status == 'processing' || message.status == 'completed' || message.status == 'waiting') {
-            console.log(`[Background] Message ${message.id} already processed`);
+        // Skip if already processing or completed
+        if (message.status == 'processing' || message.status == 'completed') {
+            console.log(`[Background] Message ${message.id} already in status: ${message.status}`);
             return;
         }
         
         try {
 
+            // Update status to processing
             message.status = 'processing';
             ChatService.editMessage(message.projectId, message);
 
@@ -238,29 +240,20 @@ class SchedulerService {
                         for (const agent of data.executionOrder) {
                             responseMessage = {
                                 id: Date.now(),
-                                agent: agent,
+                                agent: responseAgent,
                                 content: "",
                                 projectId: message.projectId,
                                 blockId: data.blockId,
                                 timestamp: new Date().toISOString(),
                                 inReplyTo: message.id,
                                 for: agent,
+                                status: 'waiting'
                             };
                             ChatService.addMessage(message.projectId, responseMessage);
-                            await this.processMessage(responseMessage, message.projectId);
+                            break;
                         }
-                    } if (data.action == 'ask-to-user') {
-                        responseMessage = {
-                            id: Date.now(),
-                            agent: responseAgent,
-                            content: data.message,
-                            projectId: message.projectId,
-                            blockId: data.blockId,
-                            timestamp: new Date().toISOString(),
-                            inReplyTo: message.id,
-                            for: 'user',
-                        };
-                        ChatService.addMessage(message.projectId, responseMessage);
+                    } else if (data.action == 'ask-to-user') {
+                        // nothing yet
                     } else {
                         responseMessage = {
                             id: Date.now(),

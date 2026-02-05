@@ -46,6 +46,8 @@ router.post('/', (req, res) => {
     // Add "for" field if provided
     if (forAgents) {
       message.for = forAgents;
+      // Add "waiting" status for messages that will be processed
+      message.status = 'waiting';
     }
     
     // Add message to project-specific chat.json
