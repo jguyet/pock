@@ -1,6 +1,7 @@
 const { spawn } = require('child_process');
 const fs = require('fs');
 const path = require('path');
+const AgentService = require('../services/AgentService');
 
 /**
  * MessageProcessor class to execute Claude commands
@@ -36,7 +37,7 @@ class MessageProcessor {
     };
 
     if (this.message.for == 'project-manager') {
-      params["available-agents"] = ["project-manager", "lead-developer", "developer"];
+      params["available-agents"] = AgentService.getAvailableAgents();
     }
 
     const paramsJson = JSON.stringify(params);

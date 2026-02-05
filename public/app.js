@@ -1,6 +1,6 @@
 // Constants
 const API_URL = 'http://localhost:8081/api';
-const AGENTS = ['user', 'project-manager', 'lead-developer', 'developer', 'tester'];
+let AGENTS = []; // Will be loaded dynamically from API
 
 // DOM Elements
 const messagesContainer = document.getElementById('messages');
@@ -21,8 +21,26 @@ function getProjectIdFromUrl() {
   return match ? match[1] : null;
 }
 
+// Load agents from API
+async function loadAgents() {
+  try {
+    const response = await fetch(`${API_URL}/agents`);
+    const data = await response.json();
+    
+    if (data.agents && Array.isArray(data.agents)) {
+      AGENTS = data.agents;
+    }
+  } catch (error) {
+    console.error('Error loading agents:', error);
+    // Fallback to default agents if API fails
+    AGENTS = ['user', 'project-manager', 'lead-developer', 'developer', 'tester'];
+  }
+}
+
 // Load project and messages on startup
 async function initializeProject() {
+  // Load agents first
+  await loadAgents();
   currentProjectId = getProjectIdFromUrl();
   
   if (!currentProjectId) {
