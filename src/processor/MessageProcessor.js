@@ -88,17 +88,18 @@ class MessageProcessor {
       console.log('[EXECUTE] PATH:', process.env.PATH);
       console.log('='.repeat(80));
       
-      // Build full command string for shell
+      // Build full command string for display only
       const fullCommand = `${command} ${args.join(' ')}`;
       console.log('[EXECUTE] Full command:', fullCommand);
       
-      const spawnProcess = spawn(fullCommand, [], {
+      // Spawn with separate arguments to avoid shell interpretation issues
+      const spawnProcess = spawn(command, args, {
         cwd: cwd,
         env: {
           ...process.env,
           PWD: cwd
         },
-        shell: true,
+        shell: false,  // Don't use shell to avoid escaping issues
         stdio: ['ignore', 'pipe', 'pipe']  // stdin: ignore, stdout: pipe, stderr: pipe
       });
 
@@ -169,7 +170,7 @@ class MessageProcessor {
         hasOutput = true;
         const chunk = data.toString();
         stderr += chunk;
-        console.log('[STDERR]', chunk);
+        console.log('[STDERR] - chunk:', chunk);
       });
 
       spawnProcess.on('close', (code) => {
