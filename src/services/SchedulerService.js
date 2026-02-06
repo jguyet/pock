@@ -197,6 +197,14 @@ class SchedulerService {
   async processMessage(message, projectId) {
         console.log(`[Background] Starting execution for message ${message.id}`);
 
+        // Check if project is paused
+        const ProjectService = require('./ProjectService');
+        const project = ProjectService.getProjectById(projectId);
+        if (project && project.paused) {
+            console.log(`[Background] Project ${projectId} is paused, skipping execution`);
+            return;
+        }
+
         // Skip if already processing or completed
         if (message.status == 'processing' || message.status == 'completed') {
             console.log(`[Background] Message ${message.id} already in status: ${message.status}`);

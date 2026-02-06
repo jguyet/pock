@@ -29,12 +29,24 @@ class MessageProcessor {
     const ChatService = require('../services/ChatService');
     const projectFolder = ChatService.getProjectFolder(this.message.projectId);
     
+    // Build context with files information if present
+    let contextWithFiles = this.message.content;
+    if (this.message.files && this.message.files.length > 0) {
+      const filesList = this.message.files.map(f => f.path).join('\n- ');
+      contextWithFiles += `\n\n📎 Fichiers joints (dans le dossier du projet) :\n- ${filesList}`;
+    }
+    
     const params = {
       from: this.message.agent,
       blockId: this.message.blockId || 0,
-      context: this.message.content,
+      context: contextWithFiles,
       projectFolder: projectFolder
     };
+
+    // Add files list to params if present
+    if (this.message.files && this.message.files.length > 0) {
+      params.attachedFiles = this.message.files.map(f => f.path);
+    }
 
     if (this.message.for == 'project-manager') {
       params["available-agents"] = AgentService.getAvailableAgents();

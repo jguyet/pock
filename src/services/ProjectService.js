@@ -106,6 +106,7 @@ class ProjectService {
       id: uuidv4(),
       title: data.title || 'Untitled Project',
       description: data.description || '',
+      paused: false,
       createdAt: new Date().toISOString(),
       updatedAt: new Date().toISOString()
     };

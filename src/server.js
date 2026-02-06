@@ -9,6 +9,7 @@ const processorRouter = require('./routes/processor');
 const projectsRouter = require('./routes/projects');
 const projectsCrudRouter = require('./routes/projects-crud');
 const agentsRouter = require('./routes/agents');
+const uploadRouter = require('./routes/upload');
 
 // Import scheduler
 const SchedulerService = require('./services/SchedulerService');
@@ -27,6 +28,7 @@ app.use('/api/process', processorRouter);
 app.use('/api/project-folder', projectsRouter);
 app.use('/api/projects', projectsCrudRouter);
 app.use('/api/agents', agentsRouter);
+app.use('/api/upload', uploadRouter);
 
 // Route for project chat page
 app.get('/project/:id', (req, res) => {

@@ -176,6 +176,16 @@ body {
   color: #ed4245;
 }
 
+#pause-btn[data-paused="true"] {
+  background: rgba(250, 166, 26, 0.1);
+  color: #faa61a;
+}
+
+#pause-btn[data-paused="true"]:hover {
+  background: rgba(250, 166, 26, 0.2);
+  color: #faa61a;
+}
+
 .btn-icon svg {
   transition: transform 0.2s ease;
 }
@@ -677,6 +687,113 @@ body {
 [data-theme="dark"] .thinking-preview {
   background: rgba(88, 101, 242, 0.1);
   border-left-color: rgba(88, 101, 242, 0.4);
+}
+
+/* ==================== File Attachments ==================== */
+.input-wrapper.drag-over {
+  border-color: var(--accent-primary);
+  background: rgba(88, 101, 242, 0.05);
+  box-shadow: 0 0 0 2px var(--accent-primary);
+}
+
+.attached-files {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  padding: 0.5rem 0;
+  margin-bottom: 0.5rem;
+  border-bottom: 1px solid var(--border-primary);
+}
+
+.file-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.3rem;
+  padding: 0.3rem 0.6rem;
+  background: var(--bg-tertiary);
+  border: 1px solid var(--border-secondary);
+  border-radius: 12px;
+  font-size: 0.8rem;
+  color: var(--text-primary);
+  transition: all 0.2s ease;
+}
+
+.file-chip:hover {
+  background: var(--bg-message);
+  border-color: var(--accent-primary);
+}
+
+.file-icon {
+  font-size: 0.9rem;
+}
+
+.file-name {
+  max-width: 150px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.file-remove {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 16px;
+  height: 16px;
+  padding: 0;
+  margin-left: 0.2rem;
+  background: rgba(237, 66, 69, 0.1);
+  color: #ed4245;
+  border: none;
+  border-radius: 50%;
+  cursor: pointer;
+  font-size: 1rem;
+  line-height: 1;
+  transition: all 0.2s ease;
+}
+
+.file-remove:hover {
+  background: #ed4245;
+  color: white;
+  transform: scale(1.1);
+}
+
+.message-files {
+  margin-top: 0.5rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.3rem;
+}
+
+.file-attachment {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.4rem 0.6rem;
+  background: rgba(88, 101, 242, 0.05);
+  border-left: 2px solid rgba(88, 101, 242, 0.3);
+  border-radius: 4px;
+  font-size: 0.8rem;
+}
+
+.file-attachment .file-icon {
+  color: var(--accent-primary);
+}
+
+.file-attachment .file-name {
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+.file-attachment .file-path {
+  font-family: 'Consolas', 'Monaco', 'Courier New', monospace;
+  color: var(--text-muted);
+  font-size: 0.75rem;
+  margin-left: auto;
+}
+
+[data-theme="dark"] .file-attachment {
+  background: rgba(88, 101, 242, 0.1);
 }
 
 /* ==================== Responsive Design ==================== */

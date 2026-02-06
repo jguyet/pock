@@ -7,12 +7,14 @@ const messagesContainer = document.getElementById('messages');
 const messageInput = document.getElementById('message-input');
 const clearBtn = document.getElementById('clear-btn');
 const suggestionsContainer = document.getElementById('suggestions');
+const pauseBtn = document.getElementById('pause-btn');
 
 // State
 let currentProjectId = null;
 let currentProject = null;
 let mentionStart = -1;
 let currentMessages = []; // Keep track of current messages to avoid flickering
+let attachedFiles = []; // Files to be uploaded with the message
 
 // Extract project ID from URL
 function getProjectIdFromUrl() {
@@ -56,6 +58,7 @@ async function initializeProject() {
     if (data.success) {
       currentProject = data.project;
       document.getElementById('project-title').textContent = currentProject.title;
+      updatePauseButton(currentProject.paused);
     } else {
       alert('Projet non trouvé');
       window.location.href = '/';
@@ -82,6 +85,33 @@ initializeProject();
 messageInput.addEventListener('keydown', handleKeyDown);
 messageInput.addEventListener('input', handleInput);
 clearBtn.addEventListener('click', clearChat);
+pauseBtn.addEventListener('click', togglePause);
+
+// Drag & Drop event listeners
+const inputWrapper = document.querySelector('.input-wrapper');
+
+inputWrapper.addEventListener('dragover', (e) => {
+  e.preventDefault();
+  e.stopPropagation();
+  inputWrapper.classList.add('drag-over');
+});
+
+inputWrapper.addEventListener('dragleave', (e) => {
+  e.preventDefault();
+  e.stopPropagation();
+  inputWrapper.classList.remove('drag-over');
+});
+
+inputWrapper.addEventListener('drop', (e) => {
+  e.preventDefault();
+  e.stopPropagation();
+  inputWrapper.classList.remove('drag-over');
+  
+  const files = Array.from(e.dataTransfer.files);
+  if (files.length > 0) {
+    handleFileDrop(files);
+  }
+});
 
 // Load messages from server
 async function loadMessages() {
@@ -245,6 +275,22 @@ function updateMessage(msg) {
     `;
   }
   
+  // Build files section if present
+  let filesSection = '';
+  if (msg.files && msg.files.length > 0) {
+    filesSection = `
+      <div class="message-files">
+        ${msg.files.map(file => `
+          <div class="file-attachment">
+            <span class="file-icon">📎</span>
+            <span class="file-name">${file.originalName}</span>
+            <span class="file-path">${file.path}</span>
+          </div>
+        `).join('')}
+      </div>
+    `;
+  }
+  
   messageDiv.innerHTML = `
     <div class="message-header">
       <span class="agent-badge ${agentClass}">${msg.agent}</span>
@@ -256,6 +302,7 @@ function updateMessage(msg) {
       ${executeBtn}
     </div>
     <div class="message-content">${processedContent || '<span class="empty-content"></span>'}</div>
+    ${filesSection}
     ${thinkingSection}
   `;
 }
@@ -291,7 +338,17 @@ function extractMentions(content) {
 // Send message
 async function sendMessage() {
   const content = messageInput.value.trim();
-  if (!content) return;
+  if (!content && attachedFiles.length === 0) return;
+  
+  // Upload files first if any
+  let uploadedFiles = [];
+  if (attachedFiles.length > 0) {
+    uploadedFiles = await uploadFiles();
+    if (uploadedFiles.length === 0 && attachedFiles.length > 0) {
+      // Upload failed
+      return;
+    }
+  }
   
   // Extract all @mentions as "for" field (but keep them in content)
   const forAgents = extractMentions(content);
@@ -302,6 +359,11 @@ async function sendMessage() {
     projectId: currentProjectId,
     timestamp: new Date().toISOString()
   };
+  
+  // Add files list if any
+  if (uploadedFiles.length > 0) {
+    message.files = uploadedFiles;
+  }
   
   // Add "for" field if @mentions found
   if (forAgents) {
@@ -322,6 +384,11 @@ async function sendMessage() {
       currentMessages.push(data.message); // Add to current messages to avoid duplication
       messageInput.value = '';
       messageInput.style.height = 'auto';
+      
+      // Clear attached files
+      attachedFiles = [];
+      displayAttachedFiles();
+      
       scrollToBottom();
       
       // Auto-execute if message has "for" field
@@ -431,6 +498,22 @@ function renderMessage(msg) {
     `;
   }
   
+  // Build files section if present
+  let filesSection = '';
+  if (msg.files && msg.files.length > 0) {
+    filesSection = `
+      <div class="message-files">
+        ${msg.files.map(file => `
+          <div class="file-attachment">
+            <span class="file-icon">📎</span>
+            <span class="file-name">${file.originalName}</span>
+            <span class="file-path">${file.path}</span>
+          </div>
+        `).join('')}
+      </div>
+    `;
+  }
+  
   messageDiv.innerHTML = `
     <div class="message-header">
       <span class="agent-badge ${agentClass}">${msg.agent}</span>
@@ -442,6 +525,7 @@ function renderMessage(msg) {
       ${executeBtn}
     </div>
     <div class="message-content">${processedContent || '<span class="empty-content"></span>'}</div>
+    ${filesSection}
     ${thinkingSection}
   `;
   
@@ -673,6 +757,121 @@ messageInput.addEventListener('input', function() {
   this.style.height = 'auto';
   this.style.height = Math.min(this.scrollHeight, 200) + 'px';
 });
+
+// ==================== Pause Handling ====================
+// Toggle pause status for project
+async function togglePause() {
+  try {
+    const response = await fetch(`${API_URL}/projects/${currentProjectId}/pause`, {
+      method: 'POST'
+    });
+    
+    const data = await response.json();
+    
+    if (data.success) {
+      currentProject.paused = data.paused;
+      updatePauseButton(data.paused);
+    }
+  } catch (error) {
+    console.error('Error toggling pause:', error);
+    alert('Erreur lors du changement d\'état de pause');
+  }
+}
+
+// Update pause button UI
+function updatePauseButton(isPaused) {
+  const iconPause = pauseBtn.querySelector('.icon-pause');
+  const iconPlay = pauseBtn.querySelector('.icon-play');
+  
+  if (isPaused) {
+    iconPause.style.display = 'none';
+    iconPlay.style.display = 'block';
+    pauseBtn.setAttribute('data-paused', 'true');
+    pauseBtn.title = 'Reprendre le projet';
+    pauseBtn.style.color = '#faa61a';
+  } else {
+    iconPause.style.display = 'block';
+    iconPlay.style.display = 'none';
+    pauseBtn.setAttribute('data-paused', 'false');
+    pauseBtn.title = 'Pause le projet';
+    pauseBtn.style.color = '';
+  }
+}
+
+// ==================== File Handling ====================
+// Handle dropped files
+function handleFileDrop(files) {
+  attachedFiles = [...attachedFiles, ...files];
+  displayAttachedFiles();
+}
+
+// Display attached files
+function displayAttachedFiles() {
+  let filesContainer = document.getElementById('attached-files');
+  
+  if (!filesContainer) {
+    filesContainer = document.createElement('div');
+    filesContainer.id = 'attached-files';
+    filesContainer.className = 'attached-files';
+    document.querySelector('.input-wrapper').insertBefore(
+      filesContainer,
+      messageInput
+    );
+  }
+  
+  if (attachedFiles.length === 0) {
+    filesContainer.style.display = 'none';
+    return;
+  }
+  
+  filesContainer.style.display = 'flex';
+  filesContainer.innerHTML = attachedFiles.map((file, index) => `
+    <div class="file-chip">
+      <span class="file-icon">📎</span>
+      <span class="file-name">${file.name}</span>
+      <button class="file-remove" onclick="removeAttachedFile(${index})">×</button>
+    </div>
+  `).join('');
+}
+
+// Remove a file from attached files
+function removeAttachedFile(index) {
+  attachedFiles.splice(index, 1);
+  displayAttachedFiles();
+}
+
+// Upload files to server
+async function uploadFiles() {
+  if (attachedFiles.length === 0) {
+    return [];
+  }
+  
+  const formData = new FormData();
+  formData.append('projectId', currentProjectId);
+  
+  attachedFiles.forEach(file => {
+    formData.append('files', file);
+  });
+  
+  try {
+    const response = await fetch(`${API_URL}/upload`, {
+      method: 'POST',
+      body: formData
+    });
+    
+    const data = await response.json();
+    
+    if (!data.success) {
+      throw new Error(data.error || 'Upload failed');
+    }
+    
+    return data.files;
+  } catch (error) {
+    console.error('Error uploading files:', error);
+    alert('Erreur lors de l\'upload des fichiers: ' + error.message);
+    return [];
+  }
+}
 
 // ==================== Theme Toggle ====================
 const themeToggle = document.getElementById('theme-toggle');
