@@ -16,7 +16,7 @@ const uploadRouter = require('./routes/upload');
 const SchedulerService = require('./services/SchedulerService');
 
 const app = express();
-const PORT = 8085;
+const PORT = 8081;
 
 // Middleware
 app.use(cors());

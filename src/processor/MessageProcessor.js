@@ -63,7 +63,7 @@ class MessageProcessor {
       '--verbose',
       '--output-format=stream-json',
       '-p',
-      '"' + paramsJson.replaceAll('"', '\\"') + '"'
+      paramsJson
     ];
 
     return { command: 'claude', args };
@@ -92,14 +92,14 @@ class MessageProcessor {
       const fullCommand = `${command} ${args.join(' ')}`;
       console.log('[EXECUTE] Full command:', fullCommand);
       
-      // Spawn with separate arguments to avoid shell interpretation issues
-      const spawnProcess = spawn(command, args, {
+      // Spawn with separate arguments to avoid ENAMETOOLONG error
+      const spawnProcess = spawn(fullCommand, [], {
         cwd: cwd,
         env: {
           ...process.env,
           PWD: cwd
         },
-        shell: false,  // Don't use shell to avoid escaping issues
+        shell: true,  // Use shell to handle arguments properly
         stdio: ['ignore', 'pipe', 'pipe']  // stdin: ignore, stdout: pipe, stderr: pipe
       });
 

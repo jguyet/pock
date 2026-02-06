@@ -61,6 +61,52 @@ router.post('/', (req, res) => {
 });
 
 /**
+ * POST /api/messages/:id/retry
+ * Retry a message: set status to waiting and delete all following messages
+ */
+router.post('/:id/retry', (req, res) => {
+  try {
+    const messageId = parseInt(req.params.id);
+    const { projectId } = req.body;
+    
+    if (!projectId) {
+      return res.status(400).json({ error: 'Project ID required' });
+    }
+    
+    const data = ChatService.readMessages(projectId);
+    
+    // Find the message index
+    const messageIndex = data.messages.findIndex(m => m.id === messageId);
+    
+    if (messageIndex === -1) {
+      return res.status(404).json({ error: 'Message not found' });
+    }
+    
+    // Set message status to waiting
+    data.messages[messageIndex].status = 'waiting';
+    delete data.messages[messageIndex].inReplyTo;
+    
+    // Remove thinking attribute if present
+    delete data.messages[messageIndex].thinking;
+    
+    // Delete all messages after this one
+    data.messages = data.messages.slice(0, messageIndex + 1);
+    
+    // Save updated messages
+    ChatService.writeMessages(projectId, data);
+    
+    res.json({ 
+      success: true, 
+      message: data.messages[messageIndex],
+      deletedCount: data.messages.length - messageIndex - 1
+    });
+  } catch (error) {
+    console.error('Error retrying message:', error);
+    res.status(500).json({ error: 'Error retrying message' });
+  }
+});
+
+/**
  * DELETE /api/messages?projectId=<id>
  * Clear all messages for a specific project
  */

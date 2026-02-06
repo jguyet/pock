@@ -106,6 +106,7 @@ class SchedulerService {
               this.processedMessages.delete(message.id);
             });
           } else {
+            console.log(`[Scheduler] Message ${message.id} not processed, skipping`);
             // Mark as seen (no processing needed)
             this.processedMessages.add(message.id);
           }

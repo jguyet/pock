@@ -622,48 +622,40 @@ async function executeMessageAuto(messageId) {
 async function executeMessage(messageId) {
   const button = event.target;
   button.disabled = true;
-  button.textContent = '⏳ Processing...';
+  button.textContent = '⏳ Retrying...';
   
   try {
-    // Include projectFolder in query params
-    const url = currentProjectId 
-      ? `${API_URL}/process/${messageId}?projectFolder=${encodeURIComponent(currentProjectId)}`
-      : `${API_URL}/process/${messageId}`;
-    
-    const response = await fetch(url, {
-      method: 'POST'
+    // Call retry endpoint to set status to waiting and delete following messages
+    const response = await fetch(`${API_URL}/messages/${messageId}/retry`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ projectId: currentProjectId })
     });
     
     const data = await response.json();
     
     if (data.success) {
+      console.log(`Message ${messageId} set to waiting. Deleted ${data.deletedCount} following messages.`);
+      
       button.textContent = '✓ Retried';
       button.style.background = '#10b981';
       
-      // Poll for new messages
-      setTimeout(() => {
-        loadMessages();
-      }, 1000);
+      // Reload messages immediately to show updated state
+      loadMessages();
       
-      // Start polling every 2 seconds for updates
-      const pollInterval = setInterval(() => {
-        loadMessages();
-      }, 2000);
-      
-      // Stop polling after 60 seconds
-      setTimeout(() => {
-        clearInterval(pollInterval);
-      }, 60000);
+      // The scheduler will automatically pick up the waiting message
     } else {
       button.textContent = '✗ Error';
       button.style.background = '#ef4444';
       button.disabled = false;
+      alert(data.error || 'Error retrying message');
     }
   } catch (error) {
-    console.error('Error executing message:', error);
+    console.error('Error retrying message:', error);
     button.textContent = '✗ Error';
     button.style.background = '#ef4444';
     button.disabled = false;
+    alert('Error retrying message');
   }
 }
 
