@@ -35,6 +35,13 @@ app.get('/project/:id', (req, res) => {
   res.sendFile(path.join(__dirname, '../public/chat.html'));
 });
 
+// Route to serve project files (images, resources, etc.)
+app.use('/project-files/:projectId', (req, res, next) => {
+  const projectId = req.params.projectId;
+  const projectFolder = path.join(__dirname, '../projects', projectId);
+  express.static(projectFolder)(req, res, next);
+});
+
 // Start server
 app.listen(PORT, () => {
   console.log(`🚀 Pock server running on http://localhost:${PORT}`);

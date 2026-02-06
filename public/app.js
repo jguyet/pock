@@ -184,7 +184,8 @@ function hasMessageChanged(oldMsg, newMsg) {
   return oldMsg.status !== newMsg.status || 
          oldMsg.content !== newMsg.content ||
          oldMsg.agent !== newMsg.agent ||
-         oldMsg.thinking !== newMsg.thinking;
+         oldMsg.thinking !== newMsg.thinking ||
+         JSON.stringify(oldMsg.images) !== JSON.stringify(newMsg.images);
 }
 
 // Update an existing message in the DOM
@@ -291,6 +292,23 @@ function updateMessage(msg) {
     `;
   }
   
+  // Build images section if present
+  let imagesSection = '';
+  if (msg.images && msg.images.length > 0) {
+    imagesSection = `
+      <div class="message-images">
+        ${msg.images.map(imagePath => {
+          const imageUrl = `/project-files/${currentProjectId}/${imagePath}`;
+          return `
+            <div class="message-image-wrapper">
+              <img src="${imageUrl}" alt="Image" class="message-image" onclick="openImageModal('${imageUrl}')">
+            </div>
+          `;
+        }).join('')}
+      </div>
+    `;
+  }
+  
   messageDiv.innerHTML = `
     <div class="message-header">
       <span class="agent-badge ${agentClass}">${msg.agent}</span>
@@ -303,6 +321,7 @@ function updateMessage(msg) {
     </div>
     <div class="message-content">${processedContent || '<span class="empty-content"></span>'}</div>
     ${filesSection}
+    ${imagesSection}
     ${thinkingSection}
   `;
 }
@@ -514,6 +533,23 @@ function renderMessage(msg) {
     `;
   }
   
+  // Build images section if present
+  let imagesSection = '';
+  if (msg.images && msg.images.length > 0) {
+    imagesSection = `
+      <div class="message-images">
+        ${msg.images.map(imagePath => {
+          const imageUrl = `/project-files/${currentProjectId}/${imagePath}`;
+          return `
+            <div class="message-image-wrapper">
+              <img src="${imageUrl}" alt="Image" class="message-image" onclick="openImageModal('${imageUrl}')">
+            </div>
+          `;
+        }).join('')}
+      </div>
+    `;
+  }
+  
   messageDiv.innerHTML = `
     <div class="message-header">
       <span class="agent-badge ${agentClass}">${msg.agent}</span>
@@ -526,6 +562,7 @@ function renderMessage(msg) {
     </div>
     <div class="message-content">${processedContent || '<span class="empty-content"></span>'}</div>
     ${filesSection}
+    ${imagesSection}
     ${thinkingSection}
   `;
   
@@ -871,6 +908,45 @@ async function uploadFiles() {
     alert('Erreur lors de l\'upload des fichiers: ' + error.message);
     return [];
   }
+}
+
+// ==================== Image Modal ====================
+// Open image in modal
+function openImageModal(imageUrl) {
+  // Create modal if it doesn't exist
+  let modal = document.getElementById('image-modal');
+  
+  if (!modal) {
+    modal = document.createElement('div');
+    modal.id = 'image-modal';
+    modal.className = 'image-modal';
+    modal.innerHTML = `
+      <div class="image-modal-content">
+        <span class="image-modal-close">&times;</span>
+        <img class="image-modal-img" src="" alt="Image">
+      </div>
+    `;
+    document.body.appendChild(modal);
+    
+    // Close on click outside or on X
+    modal.addEventListener('click', (e) => {
+      if (e.target === modal || e.target.classList.contains('image-modal-close')) {
+        modal.style.display = 'none';
+      }
+    });
+    
+    // Close on ESC key
+    document.addEventListener('keydown', (e) => {
+      if (e.key === 'Escape' && modal.style.display === 'flex') {
+        modal.style.display = 'none';
+      }
+    });
+  }
+  
+  // Set image and show modal
+  const img = modal.querySelector('.image-modal-img');
+  img.src = imageUrl;
+  modal.style.display = 'flex';
 }
 
 // ==================== Theme Toggle ====================
