@@ -272,7 +272,19 @@ class SchedulerService {
                             timestamp: new Date().toISOString(),
                             inReplyTo: message.id,
                             for: data.for || null,
+                            status: 'waiting'
                         };
+
+                        if (responseMessage.for == 'user') {
+                          responseMessage.status = 'completed';
+                        }
+                        
+                        // Add images if present in response
+                        if (data.images && Array.isArray(data.images) && data.images.length > 0) {
+                            responseMessage.images = data.images;
+                            console.log(`[Background] Added ${data.images.length} images to response message`);
+                        }
+                        
                         ChatService.addMessage(message.projectId, responseMessage);
                     }
                 }

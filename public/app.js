@@ -295,18 +295,22 @@ function updateMessage(msg) {
   // Build images section if present
   let imagesSection = '';
   if (msg.images && msg.images.length > 0) {
-    imagesSection = `
-      <div class="message-images">
-        ${msg.images.map(imagePath => {
-          const imageUrl = `/project-files/${currentProjectId}/${imagePath}`;
-          return `
-            <div class="message-image-wrapper">
-              <img src="${imageUrl}" alt="Image" class="message-image" onclick="openImageModal('${imageUrl}')">
-            </div>
-          `;
-        }).join('')}
-      </div>
-    `;
+    const validImages = msg.images;
+    
+    if (validImages.length > 0) {
+      imagesSection = `
+        <div class="message-images">
+          ${validImages.map(relativePath => {
+            const imageUrl = `/project-files/${currentProjectId}/${relativePath}`;
+            return `
+              <div class="message-image-wrapper">
+                <img src="${imageUrl}" alt="Image" class="message-image" onclick="openImageModal('${imageUrl}')">
+              </div>
+            `;
+          }).join('')}
+        </div>
+      `;
+    }
   }
   
   messageDiv.innerHTML = `
@@ -536,18 +540,24 @@ function renderMessage(msg) {
   // Build images section if present
   let imagesSection = '';
   if (msg.images && msg.images.length > 0) {
-    imagesSection = `
-      <div class="message-images">
-        ${msg.images.map(imagePath => {
-          const imageUrl = `/project-files/${currentProjectId}/${imagePath}`;
-          return `
-            <div class="message-image-wrapper">
-              <img src="${imageUrl}" alt="Image" class="message-image" onclick="openImageModal('${imageUrl}')">
-            </div>
-          `;
-        }).join('')}
-      </div>
-    `;
+    const validImages = msg.images
+      .map(imagePath => getProjectRelativePath(imagePath, currentProjectId))
+      .filter(path => path !== null);
+    
+    if (validImages.length > 0) {
+      imagesSection = `
+        <div class="message-images">
+          ${validImages.map(relativePath => {
+            const imageUrl = `/project-files/${currentProjectId}/${relativePath}`;
+            return `
+              <div class="message-image-wrapper">
+                <img src="${imageUrl}" alt="Image" class="message-image" onclick="openImageModal('${imageUrl}')">
+              </div>
+            `;
+          }).join('')}
+        </div>
+      `;
+    }
   }
   
   messageDiv.innerHTML = `
@@ -908,6 +918,33 @@ async function uploadFiles() {
     alert('Erreur lors de l\'upload des fichiers: ' + error.message);
     return [];
   }
+}
+
+// ==================== Image Helpers ====================
+/**
+ * Extract relative path from absolute path if it belongs to the project
+ * @param {string} absolutePath - Absolute path to the image
+ * @param {string} projectId - Current project ID
+ * @returns {string|null} - Relative path or null if invalid
+ */
+function getProjectRelativePath(absolutePath, projectId) {
+  // If path is already relative, return it
+  if (!absolutePath.startsWith('/')) {
+    return absolutePath;
+  }
+  
+  // Expected project folder pattern: /Users/.../projects/{projectId}/
+  const projectPattern = `/projects/${projectId}/`;
+  const projectIndex = absolutePath.indexOf(projectPattern);
+  
+  if (projectIndex === -1) {
+    console.warn('[Image] Path does not belong to project:', absolutePath);
+    return null;
+  }
+  
+  // Extract relative path after project folder
+  const relativePath = absolutePath.substring(projectIndex + projectPattern.length);
+  return relativePath;
 }
 
 // ==================== Image Modal ====================

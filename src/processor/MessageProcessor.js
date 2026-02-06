@@ -78,7 +78,7 @@ class MessageProcessor {
       const { command, args } = this.buildCommand();
       const ChatService = require('../services/ChatService');
       
-      const cwd = this.message.projectFolder || process.cwd();
+      const cwd = ChatService.getProjectFolder(this.message.projectId);
       
       console.log('='.repeat(80));
       console.log('[EXECUTE] Starting command execution');
@@ -95,7 +95,7 @@ class MessageProcessor {
       const spawnProcess = spawn(fullCommand, [], {
         cwd: cwd,
         env: {
-          ...process.env,  // Utiliser toutes les variables d'environnement
+          ...process.env,
           PWD: cwd
         },
         shell: true,

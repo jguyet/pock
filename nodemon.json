@@ -1,0 +1,12 @@
+{
+  "watch": ["src/", "public/"],
+  "ignore": [
+    "projects/**/*",
+    "projects.json",
+    "node_modules/**/*"
+  ],
+  "ext": "js,css,html",
+  "verbose": false,
+  "delay": 500
+}
+

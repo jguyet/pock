@@ -1,3 +1,4 @@
+console.log('[SERVER INIT] server.js is being executed. PID:', process.pid, 'CWD:', process.cwd());
 const express = require('express');
 const bodyParser = require('body-parser');
 const cors = require('cors');
@@ -47,7 +48,6 @@ app.listen(PORT, () => {
   console.log(`🚀 Pock server running on http://localhost:${PORT}`);
   console.log(`📁 Project root: ${path.join(__dirname, '..')}`);
   
-  // Start scheduler
   SchedulerService.start(100); // Check every 100ms
   console.log(`⏰ Scheduler started (checking every 100ms)`);
 });
