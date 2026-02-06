@@ -379,6 +379,21 @@ function renderMessage(msg) {
   // Build execute button if message has "for" field
   const executeBtn = msg.for ? `<button class="btn-execute" onclick="executeMessage(${msg.id})">🔄 Retry</button>` : '';
   
+  // Build thinking indicator if present
+  let thinkingSection = '';
+  if (msg.thinking) {
+    thinkingSection = `
+      <div class="message-thinking-indicator">
+        <div class="thinking-dots">
+          <span class="dot"></span>
+          <span class="dot"></span>
+          <span class="dot"></span>
+        </div>
+        <div class="thinking-text">💭 L'agent réfléchit...</div>
+      </div>
+    `;
+  }
+  
   messageDiv.innerHTML = `
     <div class="message-header">
       <span class="agent-badge ${agentClass}">${msg.agent}</span>
@@ -390,6 +405,7 @@ function renderMessage(msg) {
       ${executeBtn}
     </div>
     <div class="message-content">${processedContent || '<span class="empty-content"></span>'}</div>
+    ${thinkingSection}
   `;
   
   messagesContainer.appendChild(messageDiv);

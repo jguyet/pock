@@ -48,6 +48,8 @@ class MessageProcessor {
       '--tools=default',
       '--allow-dangerously-skip-permissions',
       `--agent=${agent}`,
+      '--verbose',
+      '--output-format=stream-json',
       '-p',
       '"' + paramsJson.replaceAll('"', '\\"') + '"'
     ];
@@ -62,6 +64,7 @@ class MessageProcessor {
   async execute() {
     return new Promise((resolve, reject) => {
       const { command, args } = this.buildCommand();
+      const ChatService = require('../services/ChatService');
       
       const cwd = this.message.projectFolder || process.cwd();
       
@@ -92,12 +95,62 @@ class MessageProcessor {
       let stdout = '';
       let stderr = '';
       let hasOutput = false;
+      let buffer = '';
+      let finalResult = null;
 
       spawnProcess.stdout.on('data', (data) => {
         hasOutput = true;
         const chunk = data.toString();
         stdout += chunk;
-        console.log('[STDOUT]', chunk);
+        buffer += chunk;
+        
+        // Process complete lines
+        const lines = buffer.split('\n');
+        buffer = lines.pop(); // Keep incomplete line in buffer
+        
+        for (const line of lines) {
+          if (line.trim()) {
+            try {
+              const jsonMessage = JSON.parse(line);
+              console.log('[STREAM JSON]', jsonMessage.type);
+              
+              // Handle assistant messages - update thinking
+              if ((jsonMessage.type === 'assistant' || jsonMessage.type === 'user') && jsonMessage.message?.content) {
+                let thinkingText = '';
+                for (const content of jsonMessage.message.content) {
+                  if (content.type === 'text' && content.text) {
+                    thinkingText += content.text;
+                  }
+                }
+                
+                if (thinkingText) {
+                  // Update message with thinking attribute
+                  const currentMessage = ChatService.findMessageById(this.message.projectId, this.message.id);
+                  if (currentMessage) {
+                    currentMessage.thinking = thinkingText;
+                    ChatService.editMessage(this.message.projectId, currentMessage);
+                    console.log('[THINKING] Updated thinking text, length:', thinkingText.length);
+                  }
+                }
+              }
+              
+              // Handle result message - final output
+              if (jsonMessage.type === 'result' && jsonMessage.result) {
+                const currentMessage = ChatService.findMessageById(this.message.projectId, this.message.id);
+                if (currentMessage) {
+                  delete currentMessage.thinking;
+                  ChatService.editMessage(this.message.projectId, currentMessage);
+                  console.log('[THINKING] Removed thinking text');
+                }
+                finalResult = jsonMessage.result;
+                console.log('[RESULT] Received final result');
+              }
+            } catch (error) {
+              // Not a JSON line, ignore or log
+              console.log('[STDOUT]', line);
+            }
+          }
+        }
       });
 
       spawnProcess.stderr.on('data', (data) => {
@@ -116,7 +169,11 @@ class MessageProcessor {
         console.log('='.repeat(80));
         
         if (code === 0) {
-          resolve({ success: true, output: stdout, error: stderr });
+          resolve({ 
+            success: true, 
+            output: finalResult || stdout, 
+            error: stderr 
+          });
         } else {
           reject({ success: false, output: stdout, error: stderr, exitCode: code });
         }
