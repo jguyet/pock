@@ -29,21 +29,13 @@ class MessageProcessor {
     const ChatService = require('../services/ChatService');
     const projectFolder = ChatService.getProjectFolder(this.message.projectId);
     
-    // Build context with files information if present
-    let contextWithFiles = this.message.content;
-    if (this.message.files && this.message.files.length > 0) {
-      const filesList = this.message.files.map(f => f.path).join('\n- ');
-      contextWithFiles += `\n\n📎 Fichiers joints (dans le dossier du projet) :\n- ${filesList}`;
-    }
-    
     const params = {
       from: this.message.agent,
       blockId: this.message.blockId || 0,
-      context: contextWithFiles,
+      context: this.message.content,
       projectFolder: projectFolder
     };
 
-    // Add files list to params if present
     if (this.message.files && this.message.files.length > 0) {
       params.attachedFiles = this.message.files.map(f => f.path);
     }
@@ -63,7 +55,7 @@ class MessageProcessor {
       '--verbose',
       '--output-format=stream-json',
       '-p',
-      paramsJson
+      '"' + paramsJson.replaceAll('"', '\\"').replaceAll(/`/g, "'") + '"'
     ];
 
     return { command: 'claude', args };
@@ -88,18 +80,17 @@ class MessageProcessor {
       console.log('[EXECUTE] PATH:', process.env.PATH);
       console.log('='.repeat(80));
       
-      // Build full command string for display only
+      // Build full command string for shell
       const fullCommand = `${command} ${args.join(' ')}`;
       console.log('[EXECUTE] Full command:', fullCommand);
       
-      // Spawn with separate arguments to avoid ENAMETOOLONG error
       const spawnProcess = spawn(fullCommand, [], {
         cwd: cwd,
         env: {
-          ...process.env,
+          ...process.env,  // Utiliser toutes les variables d'environnement
           PWD: cwd
         },
-        shell: true,  // Use shell to handle arguments properly
+        shell: true,
         stdio: ['ignore', 'pipe', 'pipe']  // stdin: ignore, stdout: pipe, stderr: pipe
       });
 
@@ -170,7 +161,7 @@ class MessageProcessor {
         hasOutput = true;
         const chunk = data.toString();
         stderr += chunk;
-        console.log('[STDERR] - chunk:', chunk);
+        console.log('[STDERR]', chunk);
       });
 
       spawnProcess.on('close', (code) => {
