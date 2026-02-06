@@ -96,7 +96,7 @@ async function loadMessages() {
     if (!data.messages || data.messages.length === 0) {
       if (currentMessages.length === 0) {
         messagesContainer.innerHTML = '';
-        showWelcomeMessage();
+        // showWelcomeMessage();
       }
       return;
     }
@@ -144,7 +144,7 @@ async function loadMessages() {
   } catch (error) {
     console.error('Error loading messages:', error);
     if (currentMessages.length === 0) {
-      showWelcomeMessage();
+      // showWelcomeMessage();
     }
   }
 }
@@ -153,7 +153,8 @@ async function loadMessages() {
 function hasMessageChanged(oldMsg, newMsg) {
   return oldMsg.status !== newMsg.status || 
          oldMsg.content !== newMsg.content ||
-         oldMsg.agent !== newMsg.agent;
+         oldMsg.agent !== newMsg.agent ||
+         oldMsg.thinking !== newMsg.thinking;
 }
 
 // Update an existing message in the DOM
@@ -219,6 +220,31 @@ function updateMessage(msg) {
   
   const executeBtn = msg.for ? `<button class="btn-execute" onclick="executeMessage(${msg.id})">🔄 Retry</button>` : '';
   
+  // Build thinking indicator if present
+  let thinkingSection = '';
+  if (msg.thinking) {
+    // Get last 200 characters or last few lines as preview
+    const thinkingPreview = msg.thinking.length > 200 
+      ? '...' + msg.thinking.slice(-200)
+      : msg.thinking;
+    const processedThinking = thinkingPreview
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;')
+      .replace(/\n/g, '<br>');
+    
+    thinkingSection = `
+      <div class="message-thinking-indicator">
+        <div class="thinking-dots">
+          <span class="dot"></span>
+          <span class="dot"></span>
+          <span class="dot"></span>
+        </div>
+        <div class="thinking-text">💭 L'agent réfléchit...</div>
+      </div>
+      <div class="thinking-preview">${processedThinking}</div>
+    `;
+  }
+  
   messageDiv.innerHTML = `
     <div class="message-header">
       <span class="agent-badge ${agentClass}">${msg.agent}</span>
@@ -230,6 +256,7 @@ function updateMessage(msg) {
       ${executeBtn}
     </div>
     <div class="message-content">${processedContent || '<span class="empty-content"></span>'}</div>
+    ${thinkingSection}
   `;
 }
 
@@ -382,6 +409,15 @@ function renderMessage(msg) {
   // Build thinking indicator if present
   let thinkingSection = '';
   if (msg.thinking) {
+    // Get last 200 characters or last few lines as preview
+    const thinkingPreview = msg.thinking.length > 200 
+      ? '...' + msg.thinking.slice(-200)
+      : msg.thinking;
+    const processedThinking = thinkingPreview
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;')
+      .replace(/\n/g, '<br>');
+    
     thinkingSection = `
       <div class="message-thinking-indicator">
         <div class="thinking-dots">
@@ -391,6 +427,7 @@ function renderMessage(msg) {
         </div>
         <div class="thinking-text">💭 L'agent réfléchit...</div>
       </div>
+      <div class="thinking-preview">${processedThinking}</div>
     `;
   }
   
@@ -618,7 +655,7 @@ async function clearChat() {
     if (data.success) {
       currentMessages = []; // Reset current messages
       messagesContainer.innerHTML = '';
-      showWelcomeMessage();
+      // showWelcomeMessage();
     }
   } catch (error) {
     console.error('Error clearing chat:', error);
